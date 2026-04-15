@@ -1,5 +1,7 @@
 import re
 from urllib.parse import urlparse
+from bs4 import BeautifulSoup
+import lxml
 
 def scraper(url, resp):
     links = extract_next_links(url, resp)
@@ -15,8 +17,18 @@ def extract_next_links(url, resp):
     #         resp.raw_response.url: the url, again
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
-    
-    return list()
+
+    links = list()
+
+    # Return an empty list if the status code is not 200
+    if resp.status != 200:
+        return links
+
+    # Return an empty list if there is no content
+    if not resp.raw_response or not resp.raw_response.content:
+        return links
+
+    return links
 
 def is_valid(url):
     # Decide whether to crawl this url or not. 
