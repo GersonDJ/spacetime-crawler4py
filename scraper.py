@@ -1,5 +1,5 @@
 import re
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin, urldefrag
 from bs4 import BeautifulSoup
 import lxml
 
@@ -18,15 +18,38 @@ def extract_next_links(url, resp):
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
 
+    # Create a list that will hold all links extracted from the page
     links = list()
 
     # Return an empty list if the status code is not 200
     if resp.status != 200:
         return links
 
-    # Return an empty list if there is no content
+    # Return an empty list if there is no page content
     if not resp.raw_response or not resp.raw_response.content:
         return links
+
+    try:
+        soup = BeautifulSoup(resp.raw_response.content, 'lxml')
+
+        for link in soup.find_all('a'):
+            if link:
+                # Get each linked url within the page
+                linked_url = link.get('href')
+
+                # Join it with the page's url in case its a relative url
+                complete_url = urljoin(url, linked_url)
+
+                # Discard the fragment part if there is one
+                complete_url = urldefrag(complete_url)[0]
+
+                # Add the new complete url to list of links
+                links.append(complete_url)
+
+
+    except Exception as e:
+        # Print an error message if fail to extract links
+        print(f"Failed to extract links from url {url}")
 
     return links
 
