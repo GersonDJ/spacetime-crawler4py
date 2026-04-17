@@ -46,7 +46,6 @@ def extract_next_links(url, resp):
                 # Add the new complete url to list of links
                 links.append(complete_url)
 
-
     except Exception as e:
         # Print an error message if fail to extract links
         print(f"Failed to extract links from url {url}")
@@ -59,8 +58,29 @@ def is_valid(url):
     # There are already some conditions that return False.
     try:
         parsed = urlparse(url)
+
+        # print(parsed.netloc)
+
         if parsed.scheme not in set(["http", "https"]):
             return False
+
+        # List of allowed domains for this assignment
+        domains = ['ics.uci.edu', 'cs.uci.edu', 'informatics.uci.edu', 'stat.uci.edu']
+
+        # Get the domain of the provided url
+        url_domain = parsed.netloc.lower()
+
+        # If the provided url domain is NOT one of the allowed domains, return False
+        is_an_allowed_domain = False
+
+        for each_domain in domains:
+            if each_domain == url_domain or url_domain.endswith(each_domain):
+                is_an_allowed_domain = True
+                break
+        
+        if not is_an_allowed_domain:
+            return False
+                
         return not re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
             + r"|png|tiff?|mid|mp2|mp3|mp4"
