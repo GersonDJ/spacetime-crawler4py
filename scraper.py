@@ -3,9 +3,24 @@ from urllib.parse import urlparse, urljoin, urldefrag
 from bs4 import BeautifulSoup
 import lxml
 
+# Add global variables here:
+
+
 def scraper(url, resp):
     links = extract_next_links(url, resp)
     return [link for link in links if is_valid(link)]
+
+def is_too_large():
+    # Return true if the file is too large, and return false otherwise
+    pass
+
+def has_informative_content():
+    # Return true if the page has high textual information content, and return false otherwise
+    pass
+
+def is_a_trap():
+    # Return true is the site is a crawler trap, and return false otherwise
+    pass
 
 def extract_next_links(url, resp):
     # Implementation required.
@@ -25,12 +40,15 @@ def extract_next_links(url, resp):
     if resp.status != 200:
         return links
 
+    # Get the page content
+    page_content = resp.raw_response.content
+
     # Return an empty list if there is no page content
-    if not resp.raw_response or not resp.raw_response.content:
+    if not resp.raw_response or not page_content:
         return links
 
     try:
-        soup = BeautifulSoup(resp.raw_response.content, 'lxml')
+        soup = BeautifulSoup(page_content, 'lxml')
 
         for link in soup.find_all('a'):
             if link:
