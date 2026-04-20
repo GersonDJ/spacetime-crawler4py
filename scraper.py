@@ -2,6 +2,7 @@ import re
 from urllib.parse import urlparse, urljoin, urldefrag
 from bs4 import BeautifulSoup
 import lxml
+from hashlib import sha256
 
 # Add global variables here:
 unique_urls = set()
@@ -9,7 +10,9 @@ num_words_per_url = {}
 common_word_frequencies = {}
 subdomains = {}
 
-stopwords = [
+hashes = set()
+
+stopwords = set([
     "a",          "about",      "above",      "after",
     "again",      "against",    "all",        "am",
     "an",         "and",        "any",        "are",
@@ -35,7 +38,7 @@ stopwords = [
     "of",         "off",        "on",         "once",
     "only",       "or",         "other",      "ought",
     "our",        "ours"
-]
+])
 
 def scraper(url, resp):
     links = extract_next_links(url, resp)
@@ -49,9 +52,19 @@ def is_a_trap():
     # Return true is the site is a crawler trap, and return false otherwise
     pass
 
-def is_page_similar():
-    # Return true if the page is too similar to a previously crawled page, adn return false otherwise
-    pass
+def is_page_similar(page_text):
+    # Return true if the page is too similar to a previously crawled page, and return false otherwise
+
+    # Compute the hash of the provided webpage text
+    text_to_hash = page_text[:10000] if len(page_text) > 10000 else page_text
+    page_hash = sha256(text_to_hash.encode('utf-8')).hexdigest()
+    
+    # Check if the hash was already seen
+    if page_hash in hashes:
+        return True
+    else:
+        hashes.add(page_hash)
+        return False
 
 def is_too_large():
     # Return true if the file is too large, and return false otherwise
@@ -84,6 +97,18 @@ def extract_next_links(url, resp):
 
     try:
         soup = BeautifulSoup(page_content, 'lxml')
+        
+        # Remove script and style tags...
+        for script_or_style in soup(["script", "style"]):
+            script_or_style.extract()
+
+        # ...and then get the webpage text
+        webpage_text = " ".join(soup.get_text().replace("\n", " ").split())
+        print(webpage_text)
+
+        # If the webpage text is too similar/is identical to some previous webpage text that was already scraped, then return an empty list
+        if is_page_similar(webpage_text):
+            return links  
 
         for link in soup.find_all('a'):
             if link:
