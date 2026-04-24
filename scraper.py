@@ -10,7 +10,7 @@ num_words_per_url = {}
 common_word_frequencies = {}
 subdomains = {}
 
-hashes = set()
+hashes = set() # sha256
 
 stopwords = set([
     "a",          "about",      "above",      "after",
@@ -52,11 +52,11 @@ def is_a_trap():
     # Return true is the site is a crawler trap, and return false otherwise
     pass
 
-def is_page_similar(page_text):
-    # Return true if the page is too similar to a previously crawled page, and return false otherwise
+def is_page_duplicate(page_text):
+    # Return true if the page is a duplicate of a previously crawled page, and return false otherwise
 
     # Compute the hash of the provided webpage text
-    text_to_hash = page_text[:10000] if len(page_text) > 10000 else page_text
+    text_to_hash = page_text
     page_hash = sha256(text_to_hash.encode('utf-8')).hexdigest()
     
     # Check if the hash was already seen
@@ -65,6 +65,10 @@ def is_page_similar(page_text):
     else:
         hashes.add(page_hash)
         return False
+
+def is_page_near_duplicate():
+    # Return true if the page is a near duplicate of a previously crawled page, and return false otherwise
+    pass
 
 def is_too_large():
     # Return true if the file is too large, and return false otherwise
@@ -114,14 +118,14 @@ def extract_next_links(url, resp):
         webpage_text = " ".join(soup.get_text().replace("\n", " ").split())
 
         # If the webpage text is too similar/is identical to some previous webpage text that was already scraped, then return an empty list
-        if is_page_similar(webpage_text):
+        if is_page_duplicate(webpage_text):
             return links  
 
         # Collect all the words from the webpage INCLUDING stopwords for right now
         pattern = r"\b\S+\b"
         all_words = re.findall(pattern, webpage_text.lower())
         all_words = list((word for word in all_words if word_is_valid(word)))
-        print(all_words)
+        # print(all_words)
 
         for link in soup.find_all('a'):
             if link:
