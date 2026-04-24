@@ -53,11 +53,10 @@ def is_a_trap():
     pass
 
 def is_page_duplicate(page_text):
-    # Return true if the page is a duplicate of a previously crawled page, and return false otherwise
+    # Return true if the webage is a duplicate of a previously crawled webpage, and return false otherwise
 
     # Compute the hash of the provided webpage text
-    text_to_hash = page_text
-    page_hash = sha256(text_to_hash.encode('utf-8')).hexdigest()
+    page_hash = sha256(page_text.encode('utf-8')).hexdigest()
     
     # Check if the hash was already seen
     if page_hash in hashes:
@@ -96,19 +95,19 @@ def extract_next_links(url, resp):
     if resp.status != 200:
         return links
 
-    # Get the page content
+    # Get the webpage content
     page_content = resp.raw_response.content
 
-    # Return an empty list if there is no page content
+    # Return an empty list if there is no webpage content
     if not resp.raw_response or not page_content:
         return links
 
     try:
         soup = BeautifulSoup(page_content, 'lxml')
         
-        # Remove script and style tags...
-        for script_or_style in soup(["script", "style"]):
-            script_or_style.extract()
+        # Remove all HTML tags that usually don't hold text content
+        for non_content_tag in soup(["script", "style", "img", "header", "footer", "nav"]):
+            non_content_tag.extract()
 
         # ...and then get the webpage text
         webpage_text = " ".join(soup.get_text().replace("\n", " ").split())
@@ -124,14 +123,19 @@ def extract_next_links(url, resp):
 
         # Defragmenting the current URL once for tracking below
         defragged_url = urldefrag(url)[0]
+
+        # Track unique url
+        unique_urls.add(defragged_url)
+
+        # Track word count per webpage INCLUDING stopwords
         num_words_per_url[defragged_url] = len(all_words)
 
-        # Increasing the count of global frequency of each non-stopword in the page
+        # Increasing the count of global frequency of each word in the webpage EXCLUDING stopwords
         for word in all_words:
             if word not in stopwords:
                 common_word_frequencies[word] = common_word_frequencies.get(word, 0) + 1
 
-        # For every successfully scraped page it records which subdomain it belongs to and adds its URL to that subdomain's dictionary 
+        # For every successfully scraped webpage it records which subdomain it belongs to and adds its URL to that subdomain's dictionary 
         parsed_url = urlparse(defragged_url)
         netloc = parsed_url.netloc.lower()
         if netloc.endswith('.uci.edu'):
@@ -144,17 +148,20 @@ def extract_next_links(url, resp):
 
         for link in soup.find_all('a'):
             if link:
-                # Get each linked url within the page
+                # Get each linked url within the webpage
                 linked_url = link.get('href')
+                if not linked_url:
+                    continue
 
-                # Join it with the page's url in case its a relative url
+                # Join it with the webpage's url in case its a relative url
                 complete_url = urljoin(url, linked_url)
 
                 # Discard the fragment part if there is one
                 complete_url = urldefrag(complete_url)[0]
 
                 # Add the new complete url to list of links
-                links.append(complete_url)
+                if complete_url:
+                    links.append(complete_url)
 
     except Exception as e:
         # Print an error message if fail to extract links
@@ -211,10 +218,10 @@ def output_stats(filepath="report.txt"):
  
         f.write("CRAWL STATISTICS\n\n")
  
-        # Unique pages 
+        # Unique webpages 
         f.write(f"Total unique pages crawled: {len(unique_urls)}\n\n")
  
-        # Longest page by word count 
+        # Longest webpage by word count 
         if num_words_per_url:
             longest_url = max(num_words_per_url, key=num_words_per_url.get)
             f.write(f"Longest page: {longest_url}\n")
