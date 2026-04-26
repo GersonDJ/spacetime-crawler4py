@@ -225,7 +225,7 @@ def output_stats(filepath="report.txt"):
         if num_words_per_url:
             longest_url = max(num_words_per_url, key=num_words_per_url.get)
             f.write(f"Longest page: {longest_url}\n")
-            f.write(f"  Word count: {num_words_per_url[longest_url]}\n\n")
+            f.write(f"Word count: {num_words_per_url[longest_url]}\n\n")
         else:
             f.write("No pages crawled yet.\n\n")
  
@@ -233,10 +233,10 @@ def output_stats(filepath="report.txt"):
         f.write("Top 50 most common words (stopwords excluded):\n")
         sorted_words = sorted(common_word_frequencies.items(), key=lambda x: x[1], reverse=True)
         for rank, (word, freq) in enumerate(sorted_words[:50], start=1):
-            f.write(f"  {rank:>2}. {word} ({freq})\n")
+            f.write(f"{rank:>2}. {word} ({freq})\n")
         f.write("\n")
  
         # Subdomains in alphabetical order
         f.write("Subdomains found:\n")
         for subdomain in sorted(subdomains.keys()):
-            f.write(f"  {subdomain}, {subdomains[subdomain]}\n")
+            f.write(f"{subdomain}, {subdomains[subdomain]}\n")
