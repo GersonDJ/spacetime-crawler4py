@@ -44,13 +44,64 @@ def scraper(url, resp):
     links = extract_next_links(url, resp)
     return [link for link in links if is_valid(link)]
 
-def has_informative_content():
+def has_informative_content(info):
     # Return true if the page has high textual information content, and return false otherwise
-    pass
+    words = info.lower().split()
+    meaningful_count = 0 
 
-def is_a_trap():
+    for w in words:
+        w = w.strip(".,!?;:\"()[]")
+        if w and w not in stopwords:
+            meaningful_count += 1
+
+    return meaningful_count > 20   #Threshold but it can be different, just a basic checking of real content
+
+def is_a_trap(url):
     # Return true is the site is a crawler trap, and return false otherwise
-    pass
+    try:
+        parsed_url = urlparse(url)
+        path = parsed_url.path.lower()
+        query = parsed_url.query.lower()
+
+        # catch Query Parameter Traps such as Wikis, Timelines, and Filters, (possible more sites)
+        # These catch grape.ics.uci.edu/wiki and /people/?filter= traps
+        trap_queries = [
+            r'action=diff',
+            r'action=edit',
+            r'action=download',
+            r'version=',
+            r'from=',
+            r'precision=',
+            r'filter%5b', # Checks URL-encoded "filter["
+            r'filter\['   # Checks unencoded "filter["
+        ]
+        if any(re.search(pattern, query) for pattern in trap_queries):
+            return True
+
+        # checks paths like /2012/09/ which trap you in old news, as Lopes mentioned in class
+        if re.search(r'/\d{4}/\d{2}/', path):
+            return True
+        
+        # Pagination
+        # avoiding infinite scrolling through /category/aiml/page/50/
+        if re.search(r'/page/\d+', path):
+            return True
+
+        # Split the path into parts and if too depth maybe trap, (ignoring empty strings)
+        path_parts = [part for part in path.split('/') if part]
+        if len(path_parts) > 7: # If 7 (high threadhold
+            return True
+
+        # checks patterns like /a/b/a/b/a/b/, (Repeating Directories)
+        if re.search(r'(/[^/]+)(/.*)?\1\1', path):
+            return True
+
+        return False
+
+    except Exception as e:
+        # If parsing fails for some reason, 'maybe' trap
+        print(f"Maybe trap, failed for this {url}: {e}")
+        return True    
 
 def is_page_duplicate(page_text):
     # Return true if the webage is a duplicate of a previously crawled webpage, and return false otherwise
@@ -65,15 +116,19 @@ def is_page_duplicate(page_text):
         hashes.add(page_hash)
         return False
 
-def is_too_large():
+def is_too_large(resp):
     # Return true if the file is too large, and return false otherwise
-    pass
+    if not resp.raw_response or not resp.raw_response.content:
+        return 0
+    return len(resp.raw_response.content) > 2_000_000 
 
 def word_is_valid(word):
-    # Return true if the given word has no digits 0-9, contains letters, etc. Return false otherwise
+    # Return true if the given word has no digits 0-9, contains letters, or is only a single character. Return false otherwise
     if any(char.isdigit() for char in word):
         return False
     if not any(char.isalpha() for char in word):
+        return False
+    if len(word) < 2 and word.lower() not in ['a', 'i', 'o']:  # A, I, and O are the only words that are a single character long.
         return False
     return True
 
@@ -88,38 +143,77 @@ def extract_next_links(url, resp):
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
 
-    # Create a list that will hold all links extracted from the page
-    links = list()
+    # Gerson mod - Create a list that will hold all links extracted from the page (changed to set instead of list)
+    links = set()
+
+    # Return an empty list if the response is too large
+    if is_too_large(resp):
+        return links
 
     # Return an empty list if the status code is not 200
     if resp.status != 200:
         return links
 
+    # Return an empty list if there is no webpage content
+    if not resp.raw_response or not resp.raw_response.content:
+        return links
+
     # Get the webpage content
     page_content = resp.raw_response.content
 
-    # Return an empty list if there is no webpage content
-    if not resp.raw_response or not page_content:
-        return links
+    # Get the encoding from the raw response
+    encoding = resp.raw_response.encoding 
+
+    # If encoding equals None, then default to utf-8 because that's the most common encoding used 
+    if not encoding:
+        encoding = 'utf-8'
 
     try:
-        soup = BeautifulSoup(page_content, 'lxml')
+        # Try decoding the bytes using the encoding provided from the raw response
+        decoded = page_content.decode(encoding)
+
+    except (UnicodeDecodeError, LookupError):
+        # If the bytes failed to match the encoding, or the encoding name was unrecognized...
+        try:
+            # ...then try to fallback to using utf-8 with forgiveness...
+            decoded = page_content.decode('utf-8', errors='replace')
+        except Exception:
+            # ...and then try to to use Latin-1 with forgiveness as a last resort.
+            decoded = page_content.decode('latin-1', errors='replace')
+
+    try:
+        soup = BeautifulSoup(decoded, 'lxml')
         
         # Remove all HTML tags that usually don't hold text content
         for non_content_tag in soup(["script", "style", "img", "header", "footer", "nav"]):
             non_content_tag.extract()
 
-        # ...and then get the webpage text
+        # Gerson-mod get the text like before
         webpage_text = " ".join(soup.get_text().replace("\n", " ").split())
 
-        # If the webpage text is a duplicate of some previous webpage text that was already scraped, then return an empty list
+        # Gerson-mod EXTRACT LINKS FIRST
+        for link in soup.find_all('a'):
+            if link:
+                linked_url = link.get('href')
+                if not linked_url:
+                    continue
+                complete_url = urljoin(url, linked_url)
+                complete_url = urldefrag(complete_url)[0]
+                if complete_url:
+                    links.add(complete_url)
+
+        # Gerson-mod If it's bad, return the links we just found, but not tracking the stats.
+        if not has_informative_content(webpage_text):
+            return links
+
         if is_page_duplicate(webpage_text):
             return links  
 
-        # Collect all the words from the webpage INCLUDING stopwords for right now
+        # Gerson-mod Now it is safe to track statistics.
         pattern = r"\b\S+\b"
         all_words = re.findall(pattern, webpage_text.lower())
         all_words = list((word for word in all_words if word_is_valid(word)))
+        
 
         # Defragmenting the current URL once for tracking below
         defragged_url = urldefrag(url)[0]
@@ -146,23 +240,7 @@ def extract_next_links(url, resp):
         # Store all words EXCLUDING stopwords
         content_words_no_stopwords = [word for word in all_words if word not in stopwords]
 
-        for link in soup.find_all('a'):
-            if link:
-                # Get each linked url within the webpage
-                linked_url = link.get('href')
-                if not linked_url:
-                    continue
-
-                # Join it with the webpage's url in case its a relative url
-                complete_url = urljoin(url, linked_url)
-
-                # Discard the fragment part if there is one
-                complete_url = urldefrag(complete_url)[0]
-
-                # Add the new complete url to list of links
-                if complete_url:
-                    links.append(complete_url)
-
+  
     except Exception as e:
         # Print an error message if fail to extract links
         print(f"Failed to extract links from url {url}")
@@ -175,6 +253,9 @@ def is_valid(url):
     # There are already some conditions that return False.
     try:
         parsed = urlparse(url)
+
+        if is_a_trap(url):
+            return False
 
         # print(parsed.netloc)
 
@@ -212,31 +293,31 @@ def is_valid(url):
         print ("TypeError for ", parsed)
         raise
 
-def output_stats(filepath="report.txt"):
-    # Will be used to output statistics of the crawler
-    with open(filepath, "w") as f:
+# def output_stats(filepath="report.txt"):
+#     # Will be used to output statistics of the crawler
+#     with open(filepath, "w") as f:
  
-        f.write("CRAWL STATISTICS\n\n")
+#         f.write("CRAWL STATISTICS\n\n")
  
-        # Unique webpages 
-        f.write(f"Total unique pages crawled: {len(unique_urls)}\n\n")
+#         # Unique pages 
+#         f.write(f"Total unique pages crawled: {len(unique_urls)}\n\n")
  
-        # Longest webpage by word count 
-        if num_words_per_url:
-            longest_url = max(num_words_per_url, key=num_words_per_url.get)
-            f.write(f"Longest page: {longest_url}\n")
-            f.write(f"Word count: {num_words_per_url[longest_url]}\n\n")
-        else:
-            f.write("No pages crawled yet.\n\n")
+#         # Longest page by word count 
+#         if num_words_per_url:
+#             longest_url = max(num_words_per_url, key=num_words_per_url.get)
+#             f.write(f"Longest page: {longest_url}\n")
+#             f.write(f"Word count: {num_words_per_url[longest_url]}\n\n")
+#         else:
+#             f.write("No pages crawled yet.\n\n")
  
-        # Top 50 most common words, no stopwords 
-        f.write("Top 50 most common words (stopwords excluded):\n")
-        sorted_words = sorted(common_word_frequencies.items(), key=lambda x: x[1], reverse=True)
-        for rank, (word, freq) in enumerate(sorted_words[:50], start=1):
-            f.write(f"{rank:>2}. {word} ({freq})\n")
-        f.write("\n")
+#         # Top 50 most common words, no stopwords 
+#         f.write("Top 50 most common words (stopwords excluded):\n")
+#         sorted_words = sorted(common_word_frequencies.items(), key=lambda x: x[1], reverse=True)
+#         for rank, (word, freq) in enumerate(sorted_words[:50], start=1):
+#             f.write(f"{rank:>2}. {word} ({freq})\n")
+#         f.write("\n")
  
-        # Subdomains in alphabetical order
-        f.write("Subdomains found:\n")
-        for subdomain in sorted(subdomains.keys()):
-            f.write(f"{subdomain}, {subdomains[subdomain]}\n")
+#         # Subdomains in alphabetical order
+#         f.write("Subdomains found:\n")
+#         for subdomain in sorted(subdomains.keys()):
+#             f.write(f"{subdomain}, {subdomains[subdomain]}\n")
